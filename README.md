@@ -2,7 +2,7 @@
 
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://pypi.org/project/pqc-sizes/)
-[![tests](https://img.shields.io/badge/tests-64%20passing-brightgreen.svg)](tests/)
+[![tests](https://img.shields.io/badge/tests-88%20passing-brightgreen.svg)](tests/)
 [![deps](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
 
 **Your post-quantum credential doesn't fit in one frame. Find out what that costs you — in 5 seconds.**
@@ -129,6 +129,26 @@ $ pqc-sizes --json window --largest-object 12000 --budget 32768 --concurrency 3
 The exit code still carries the verdict in `--json` mode, so you can pipe the
 body to `jq` and branch on `$?` at the same time.
 
+### Sizing a budget from scratch
+
+`window` answers "is my budget enough?". Most people start a step earlier — they
+have a credential and a concurrency target and need the budget:
+
+```
+$ pqc-sizes budget --kem ML-KEM-768 --sig ML-DSA-65 --concurrency 4
+ML-KEM-768 + ML-DSA-65: 7,533 B, 4 concurrent contexts
+  minimum budget   30,132 B
+  at exactly this budget the window is a single point (7,533 B): the only
+  admissible cap is the object size itself, leaving no headroom for a larger
+  legitimate object.
+
+  2x headroom      60,264 B
+  4x headroom      120,528 B
+```
+
+The minimum is exact in both directions — a test asserts that budget produces a
+non-empty window and that one byte less does not.
+
 ### SARIF for GitHub code scanning
 
 `--format sarif` emits a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json)
@@ -161,7 +181,7 @@ non-empty window means a cap *exists* — not that your code enforces it.
 ## Tests
 
 ```bash
-pip install -e ".[dev]" && pytest    # 64 passed
+pip install -e ".[dev]" && pytest    # 88 passed
 ```
 
 ## Where this comes from
@@ -191,6 +211,7 @@ For commercial use, open a [GitHub Discussion](https://github.com/nickharris808)
 | `pqc-sizes fragments TRANSPORT --bytes N` | Same, for a raw object size | 0 |
 | `pqc-sizes window --largest-object N --budget N --concurrency N` | Does a safe cap exist? | 0 / **1** |
 | `pqc-sizes sweep --largest-object N --budget N --max-concurrency N` | Where the window collapses | 0 |
+| `pqc-sizes budget --kem K --sig S --concurrency N` | How much memory do N contexts need? | 0 |
 | `pqc-sizes check CONFIG` | Gate on a committed JSON/YAML config | 0 / **1** |
 | `pqc-sizes check CONFIG --format sarif` | Same, as a GitHub code-scanning report | 0 / **1** |
 

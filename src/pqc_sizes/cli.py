@@ -118,6 +118,62 @@ def cmd_window(args: argparse.Namespace) -> int:
     return 1 if win.is_empty else 0
 
 
+def cmd_budget(args: argparse.Namespace) -> int:
+    """Invert the window: how much memory do I need for N contexts?
+
+    `window` answers "is my budget enough?". Nobody starts there -- they start
+    with a credential and a concurrency target and need the budget. Solving it
+    by hand means re-deriving ceiling >= floor, which is exactly the arithmetic
+    people get wrong.
+    """
+    # Refuse degenerate inputs rather than computing with them. `7533 * 0` is 0,
+    # and printing "minimum budget 0 B" would be a confident answer to a question
+    # nobody meant to ask.
+    if args.concurrency < 1:
+        print(f"--concurrency must be at least 1, got {args.concurrency}\n"
+              f"  fix: concurrency is the worst-case number of reassembly contexts "
+              f"held at once; zero contexts is not a deployment", file=sys.stderr)
+        return 2
+    if args.largest_object and args.largest_object < 1:
+        print(f"--largest-object must be positive, got {args.largest_object}\n"
+              f"  fix: give the size in bytes of the biggest object you must accept",
+              file=sys.stderr)
+        return 2
+
+    if args.kem and args.sig:
+        try:
+            largest = Credential(ALGORITHMS[args.kem], ALGORITHMS[args.sig]).total_bytes
+        except KeyError as exc:
+            print(f"unknown algorithm: {exc}. Try `pqc-sizes sizes`.", file=sys.stderr)
+            return 2
+        what = f"{args.kem} + {args.sig}"
+    else:
+        largest = args.largest_object
+        what = f"{_fmt(largest)} B object"
+
+    # ceiling = budget // concurrency must be >= floor, so budget >= floor * concurrency.
+    required = largest * args.concurrency
+
+    if args.json:
+        print(json.dumps({
+            "largest_object": largest, "concurrency": args.concurrency,
+            "required_budget": required,
+            "headroom_at": {str(m): largest * args.concurrency * m for m in (2, 4)},
+        }, indent=2))
+        return 0
+
+    print(f"{what}: {_fmt(largest)} B, {args.concurrency} concurrent contexts")
+    print(f"  minimum budget   {_fmt(required)} B")
+    print(_wrapped(
+        f"at exactly this budget the window is a single point ({_fmt(largest)} B): "
+        f"the only admissible cap is the object size itself, leaving no headroom "
+        f"for a larger legitimate object.", indent="  "))
+    print()
+    print(f"  2x headroom      {_fmt(required * 2)} B")
+    print(f"  4x headroom      {_fmt(required * 4)} B")
+    return 0
+
+
 #: Keys a config file may set. Anything else is a typo, and a typo that is
 #: silently ignored is a config that does not do what its author thinks.
 _CONFIG_KEYS = {"kem", "sig", "largest_object", "budget", "concurrency", "transport"}
@@ -268,6 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--concurrency", type=int, required=True)
     w.set_defaults(func=cmd_window)
 
+    bg = sub.add_parser("budget", help="how much memory do N contexts need?")
+    bg.add_argument("--largest-object", type=int, default=0)
+    bg.add_argument("--kem")
+    bg.add_argument("--sig")
+    bg.add_argument("--concurrency", type=int, required=True)
+    bg.set_defaults(func=cmd_budget)
+
     ck = sub.add_parser("check", help="gate on a committed config file")
     ck.add_argument("config", help="JSON (or YAML) file of reassembly settings")
     ck.add_argument("--format", choices=["text", "sarif"], default="text",
@@ -302,6 +365,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if getattr(args, "cmd", None) == "fragments" and not (args.bytes or (args.kem and args.sig)):
         print("give --bytes N, or both --kem and --sig", file=sys.stderr)
+        return 2
+    if getattr(args, "cmd", None) == "budget" and not (
+            args.largest_object or (args.kem and args.sig)):
+        print("give --largest-object N, or both --kem and --sig", file=sys.stderr)
         return 2
     try:
         return args.func(args)
