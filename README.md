@@ -129,6 +129,20 @@ $ pqc-sizes --json window --largest-object 12000 --budget 32768 --concurrency 3
 The exit code still carries the verdict in `--json` mode, so you can pipe the
 body to `jq` and branch on `$?` at the same time.
 
+### SARIF for GitHub code scanning
+
+`--format sarif` emits a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json)
+log so an empty window appears in the repository's Security tab, anchored to the
+config file that causes it. A test validates the output against the published
+schema, because GitHub silently ignores a SARIF file it cannot parse.
+
+```yaml
+- run: pqc-sizes check pqc.json --format sarif -o pqc.sarif
+  continue-on-error: true
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: pqc.sarif }
+```
+
 ## What's included
 
 **Algorithms** — ML-KEM 512/768/1024, ML-DSA 44/65/87, Falcon 512/1024, SLH-DSA
@@ -178,6 +192,7 @@ For commercial use, open a [GitHub Discussion](https://github.com/nickharris808)
 | `pqc-sizes window --largest-object N --budget N --concurrency N` | Does a safe cap exist? | 0 / **1** |
 | `pqc-sizes sweep --largest-object N --budget N --max-concurrency N` | Where the window collapses | 0 |
 | `pqc-sizes check CONFIG` | Gate on a committed JSON/YAML config | 0 / **1** |
+| `pqc-sizes check CONFIG --format sarif` | Same, as a GitHub code-scanning report | 0 / **1** |
 
 `--json` is **global** and goes before the subcommand:
 `pqc-sizes --json window ...`. The exit code carries the verdict in `--json`

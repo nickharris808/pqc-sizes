@@ -53,3 +53,6 @@ exclude = ["build", "dist", ".venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.setuptools.package-data]
+pqc_sizes = ["py.typed"]

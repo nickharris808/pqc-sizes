@@ -192,6 +192,12 @@ def cmd_check(args: argparse.Namespace) -> int:
     win = reassembly_window(largest, cfg["budget"], cfg["concurrency"])
     safe = max_concurrent_contexts(largest, cfg["budget"])
 
+    if getattr(args, "format", None) == "sarif":
+        from .report import write_sarif
+        text = write_sarif(win, safe, str(path), args.output)
+        print(f"wrote sarif report to {args.output}" if args.output else text)
+        return 1 if win.is_empty else 0
+
     if args.json:
         print(json.dumps({
             "config": str(path), "floor": win.floor, "ceiling": win.ceiling,
@@ -264,6 +270,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ck = sub.add_parser("check", help="gate on a committed config file")
     ck.add_argument("config", help="JSON (or YAML) file of reassembly settings")
+    ck.add_argument("--format", choices=["text", "sarif"], default="text",
+                    help="sarif emits a GitHub code-scanning report")
+    ck.add_argument("-o", "--output", help="write the report to a file")
     ck.set_defaults(func=cmd_check)
 
     q = sub.add_parser("sweep", help="find the concurrency at which the window empties")
