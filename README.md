@@ -2,7 +2,7 @@
 
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://pypi.org/project/pqc-sizes/)
-[![tests](https://img.shields.io/badge/tests-53%20passing-brightgreen.svg)](tests/)
+[![tests](https://img.shields.io/badge/tests-64%20passing-brightgreen.svg)](tests/)
 [![deps](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
 
 **Your post-quantum credential doesn't fit in one frame. Find out what that costs you — in 5 seconds.**
@@ -45,9 +45,11 @@ retention × concurrency, not retention alone.
 ## Install
 
 ```bash
-pip install pqc-sizes            # once published
-pip install -e .                 # from a clone, today
+pip install git+https://github.com/nickharris808/pqc-sizes
 ```
+
+Zero dependencies, Python 3.9+. Not on PyPI yet, so `pip install pqc-sizes`
+does not work today — the command above does.
 
 ## 30-second quickstart
 
@@ -145,7 +147,7 @@ non-empty window means a cap *exists* — not that your code enforces it.
 ## Tests
 
 ```bash
-pip install -e ".[dev]" && pytest    # 53 passed
+pip install -e ".[dev]" && pytest    # 64 passed
 ```
 
 ## Where this comes from
@@ -164,6 +166,69 @@ device.
 
 Relevant subject matter is covered by a filed provisional patent application.
 For commercial use, open a [GitHub Discussion](https://github.com/nickharris808) or an issue.
+
+## CLI reference
+
+| Command | What it does | Exit |
+|---|---|---|
+| `pqc-sizes sizes [--kind KEM\|signature]` | The algorithm table | 0 |
+| `pqc-sizes credential --kem K --sig S` | Credential bytes, component by component | 0 |
+| `pqc-sizes fragments TRANSPORT --kem K --sig S` | Fragment count on a transport | 0 |
+| `pqc-sizes fragments TRANSPORT --bytes N` | Same, for a raw object size | 0 |
+| `pqc-sizes window --largest-object N --budget N --concurrency N` | Does a safe cap exist? | 0 / **1** |
+| `pqc-sizes sweep --largest-object N --budget N --max-concurrency N` | Where the window collapses | 0 |
+| `pqc-sizes check CONFIG` | Gate on a committed JSON/YAML config | 0 / **1** |
+
+`--json` is **global** and goes before the subcommand:
+`pqc-sizes --json window ...`. The exit code carries the verdict in `--json`
+mode too, so you can pipe to `jq` and branch on `$?`.
+
+**Config keys** for `check`: `kem`, `sig`, `largest_object`, `budget`,
+`concurrency`, `transport`. Give either `largest_object`, or both `kem` and
+`sig`. An unrecognised key is an error rather than being ignored — a silently
+dropped setting is a config that does not do what its author thinks.
+
+## Troubleshooting
+
+**`EMPTY WINDOW` and I think my config is fine.** That is the tool working. It
+means no single cap is both ≥ your largest legitimate object and ≤ budget ÷
+concurrency. The message gives you three numbers, any one of which fixes it.
+
+**Exit code 1 vs 2.** `1` means the check ran and the answer is bad. `2` means
+the invocation was wrong. If CI reports `2`, read stderr — every validation
+error names the flag to change.
+
+**`unrecognized arguments: --json`.** It is a global flag; put it before the
+subcommand.
+
+**`unknown transport '...'`.** Run `pqc-sizes fragments --help`, or pass a raw
+byte count instead of a name.
+
+**Numbers differ from my build.** These are published parameter-set sizes.
+Certificate chains, encodings and framing are yours to add — pass the real total
+via `--bytes` or `largest_object`.
+
+## Honest scope
+
+**What this proves.** That your *configuration* admits a reassembly cap which is
+both feasible (at least as large as the biggest legitimate object) and safe (no
+larger than budget ÷ concurrency). The arithmetic is exact — Python integers, no
+floating point — over published object sizes.
+
+**What it does NOT prove.**
+
+- **Not that your code enforces the cap.** This never sees your implementation. A
+  non-empty window means a safe cap *exists*, not that anything applies it.
+- **Not that the sizes match your build.** They are the published parameter-set
+  sizes. Encodings, certificate chains and framing overhead are yours to add.
+- **Not a security review.** Fragmentation exposure is one failure family of 39;
+  see [`pqc-mfb`](https://github.com/nickharris808/pqc-mfb) for the other 38.
+- **Not a cryptographic claim.** No key exchange, no signature, no randomness —
+  it is arithmetic.
+
+**Exit codes.** `0` a safe cap exists · `1` the window is empty · `2` bad usage.
+That split is deliberate: a CI gate must tell "your design is unsafe" apart from
+"you typed the flag wrong".
 
 ---
 
@@ -184,7 +249,9 @@ Nine free tools for teams moving authenticated key exchange to post-quantum. The
 | [pqc-formal-corpus](https://huggingface.co/datasets/nickh007/pqc-formal-corpus) | 122 named formal results, 6 provers | HF |
 | [pqc-explorer](https://huggingface.co/spaces/nickh007/pqc-explorer) | Try it in your browser, no install | HF Space |
 
-**Start here:** [`pqc-sizes`](https://github.com/nickharris808/pqc-sizes) tells you in five seconds whether your credential fragments and whether a safe cap exists. [`pqc-explorer`](https://huggingface.co/spaces/nickh007/pqc-explorer) does the same in a browser.
+**New here?** The [end-to-end tutorial](https://github.com/nickharris808/pqc-sizes/blob/main/TUTORIAL.md) walks one realistic migration through all of them in about ten minutes: sizes -> window -> CI gate -> benchmark.
+
+**In a hurry?** [`pqc-sizes`](https://github.com/nickharris808/pqc-sizes) tells you in five seconds whether your credential fragments and whether a safe cap exists. [`pqc-explorer`](https://huggingface.co/spaces/nickh007/pqc-explorer) does the same in a browser, with no install.
 
 ### The closed core
 

@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import textwrap
+from pathlib import Path
 
 from .core import (
     ALGORITHMS,
@@ -117,6 +118,98 @@ def cmd_window(args: argparse.Namespace) -> int:
     return 1 if win.is_empty else 0
 
 
+#: Keys a config file may set. Anything else is a typo, and a typo that is
+#: silently ignored is a config that does not do what its author thinks.
+_CONFIG_KEYS = {"kem", "sig", "largest_object", "budget", "concurrency", "transport"}
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    """Gate on a committed config file instead of four hand-typed flags.
+
+    Reads JSON (or YAML, if PyYAML happens to be installed) so a team can keep
+    its reassembly parameters under review alongside the code they describe.
+    """
+    path = Path(args.config)
+    if not path.exists():
+        print(f"config not found: {path}\n"
+              f"  fix: create it, e.g.\n"
+              f"       {{\"kem\": \"ML-KEM-768\", \"sig\": \"ML-DSA-65\",\n"
+              f"        \"budget\": 65536, \"concurrency\": 4}}", file=sys.stderr)
+        return 2
+
+    text = path.read_text(encoding="utf-8")
+    try:
+        cfg = json.loads(text)
+    except json.JSONDecodeError as exc:
+        try:
+            import yaml
+        except ImportError:
+            print(f"{path} is not valid JSON: {exc}\n"
+                  f"  fix: correct the JSON, or `pip install pyyaml` to use YAML.",
+                  file=sys.stderr)
+            return 2
+        try:
+            cfg = yaml.safe_load(text)
+        except Exception as yexc:  # noqa: BLE001 - report whatever the parser says
+            print(f"{path} parses as neither JSON nor YAML: {yexc}", file=sys.stderr)
+            return 2
+
+    if not isinstance(cfg, dict):
+        print(f"{path} must contain a mapping of settings, got "
+              f"{type(cfg).__name__}", file=sys.stderr)
+        return 2
+
+    unknown = sorted(set(cfg) - _CONFIG_KEYS)
+    if unknown:
+        print(f"unknown setting(s) in {path}: {', '.join(unknown)}\n"
+              f"  fix: valid keys are {', '.join(sorted(_CONFIG_KEYS))}", file=sys.stderr)
+        return 2
+
+    # The largest legitimate object is either given outright or derived from the
+    # credential, so a config need only name its suite.
+    largest = cfg.get("largest_object")
+    if largest is None:
+        kem, sig = cfg.get("kem"), cfg.get("sig")
+        if not (kem and sig):
+            print(f"{path} must set either largest_object, or both kem and sig\n"
+                  f"  fix: add \"kem\" and \"sig\", or an explicit \"largest_object\"",
+                  file=sys.stderr)
+            return 2
+        try:
+            largest = Credential(ALGORITHMS[kem], ALGORITHMS[sig]).total_bytes
+        except KeyError as exc:
+            print(f"unknown algorithm {exc} in {path}\n"
+                  f"  fix: see `pqc-sizes sizes` for the known names", file=sys.stderr)
+            return 2
+
+    for required in ("budget", "concurrency"):
+        if cfg.get(required) is None:
+            print(f"{path} is missing \"{required}\"\n"
+                  f"  fix: budget is total reassembly bytes; concurrency is the "
+                  f"worst-case number of simultaneous contexts", file=sys.stderr)
+            return 2
+
+    win = reassembly_window(largest, cfg["budget"], cfg["concurrency"])
+    safe = max_concurrent_contexts(largest, cfg["budget"])
+
+    if args.json:
+        print(json.dumps({
+            "config": str(path), "floor": win.floor, "ceiling": win.ceiling,
+            "budget": win.budget, "concurrency": win.concurrency,
+            "empty": win.is_empty, "recommended_cap": win.recommended,
+            "max_safe_concurrency": safe,
+        }, indent=2))
+        return 1 if win.is_empty else 0
+
+    print(f"{path}: {_fmt(largest)} B object, {_fmt(cfg['budget'])} B budget, "
+          f"{cfg['concurrency']} contexts")
+    print(_wrapped(win.explain(), indent="  "))
+    if not win.is_empty:
+        print(_wrapped(f"max safe concurrency at this object size: {safe}",
+                       indent="  "))
+    return 1 if win.is_empty else 0
+
+
 def cmd_sweep(args: argparse.Namespace) -> int:
     """Show where the window collapses as concurrency rises."""
     print(f"largest legitimate object: {_fmt(args.largest_object)} B   "
@@ -168,6 +261,10 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--budget", type=int, required=True)
     w.add_argument("--concurrency", type=int, required=True)
     w.set_defaults(func=cmd_window)
+
+    ck = sub.add_parser("check", help="gate on a committed config file")
+    ck.add_argument("config", help="JSON (or YAML) file of reassembly settings")
+    ck.set_defaults(func=cmd_check)
 
     q = sub.add_parser("sweep", help="find the concurrency at which the window empties")
     q.add_argument("--largest-object", type=int, required=True)

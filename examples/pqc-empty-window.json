@@ -1,0 +1,6 @@
+{
+  "kem": "ML-KEM-768",
+  "sig": "SLH-DSA-SHA2-128f",
+  "budget": 65536,
+  "concurrency": 4
+}
