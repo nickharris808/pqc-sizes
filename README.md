@@ -18,6 +18,8 @@ It exits **1** when the window is empty, so it works as a CI gate as-is.
 
 Zero dependencies. Pure arithmetic. No crypto, no network, no telemetry.
 
+**📖 Full documentation, tutorial and conceptual guide: <https://nickharris808.github.io/pqc-toolkit/>**
+
 ---
 
 ## Why this exists
