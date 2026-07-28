@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 
 from .core import (
     ALGORITHMS,
@@ -18,6 +19,21 @@ from .core import (
 
 def _fmt(n: int) -> str:
     return f"{n:,}"
+
+
+def _wrapped(text: str, indent: str = "", hang: str | None = None) -> str:
+    """Wrap prose for a terminal.
+
+    ``Window.explain()`` deliberately returns a single unbroken string: it is
+    embedded verbatim in JSON by the MCP server, in GitHub Actions annotations
+    by pqc-guard-action, and in Markdown by the Space, none of which want hard
+    line breaks. Wrapping is therefore a property of *this* presentation layer
+    only, applied at print time.
+    """
+    return textwrap.fill(
+        text, width=78, initial_indent=indent,
+        subsequent_indent=indent if hang is None else hang,
+    )
 
 
 def cmd_sizes(args: argparse.Namespace) -> int:
@@ -74,8 +90,10 @@ def cmd_fragments(args: argparse.Namespace) -> int:
     print(f"{what} over {args.transport} ({_fmt(payload)} B/frame): "
           f"{n} fragment{'s' if n != 1 else ''}")
     if n > 1:
-        print(f"  -> fragmentation is mandatory; the receiver holds partial, "
-              f"unauthenticated state across {n} frames")
+        print(_wrapped(
+            f"-> fragmentation is mandatory; the receiver holds partial, "
+            f"unauthenticated state across {n} frames",
+            indent="  ", hang="     "))
     return 0
 
 
@@ -90,10 +108,12 @@ def cmd_window(args: argparse.Namespace) -> int:
                 args.largest_object, args.budget),
         }, indent=2))
         return 1 if win.is_empty else 0
-    print(win.explain())
+    print(_wrapped(win.explain()))
     if not win.is_empty:
-        print(f"  max safe concurrency at this object size: "
-              f"{max_concurrent_contexts(args.largest_object, args.budget)}")
+        print(_wrapped(
+            f"max safe concurrency at this object size: "
+            f"{max_concurrent_contexts(args.largest_object, args.budget)}",
+            indent="  "))
     return 1 if win.is_empty else 0
 
 
@@ -111,8 +131,9 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             empty_at = c
         print(f"{c:>9} {_fmt(win.ceiling):>12}   {state}")
     if empty_at:
-        print(f"\nwindow becomes EMPTY at {empty_at} concurrent contexts -- "
-              f"that is this device's derived concurrency limit.")
+        print("\n" + _wrapped(
+            f"window becomes EMPTY at {empty_at} concurrent contexts -- "
+            f"that is this device's derived concurrency limit."))
     else:
         print(f"\nwindow non-empty through {args.max_concurrency} contexts.")
     return 0
@@ -156,12 +177,40 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+#: Maps a validation failure to the flag the user actually needs to change. A
+#: traceback tells them the assertion that fired; this tells them what to type.
+_REMEDY = {
+    "concurrency": "--concurrency must be at least 1 (the number of reassembly "
+                   "contexts held at once)",
+    "memory_budget": "--budget must be a positive byte count (the total reassembly "
+                     "memory available)",
+    "largest_legitimate_object": "--largest-object must be a positive byte count "
+                                 "(the biggest object you must accept)",
+    "frame_payload": "the transport payload must be positive; pass a known transport "
+                     f"({', '.join(list(TRANSPORTS)[:3])}, ...) or --bytes N",
+    "object_bytes": "the object size must be positive",
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if getattr(args, "cmd", None) == "fragments" and not (args.bytes or (args.kem and args.sig)):
         print("give --bytes N, or both --kem and --sig", file=sys.stderr)
         return 2
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ValueError as exc:
+        # Domain validation reaches the user as a usage error naming the fix, not as
+        # a stack trace. Exit 2 (usage) rather than 1, which this CLI reserves for
+        # "the check ran and the answer is bad" -- a CI gate must be able to tell a
+        # broken invocation apart from a genuine empty window.
+        message = str(exc)
+        for key, remedy in _REMEDY.items():
+            if key in message:
+                print(f"{message}\n  fix: {remedy}", file=sys.stderr)
+                return 2
+        print(f"{message}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

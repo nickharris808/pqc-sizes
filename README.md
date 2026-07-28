@@ -2,16 +2,19 @@
 
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://pypi.org/project/pqc-sizes/)
-[![tests](https://img.shields.io/badge/tests-26%20passing-brightgreen.svg)](tests/)
+[![tests](https://img.shields.io/badge/tests-53%20passing-brightgreen.svg)](tests/)
 [![deps](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](pyproject.toml)
 
 **Your post-quantum credential doesn't fit in one frame. Find out what that costs you — in 5 seconds.**
 
 ```
 $ pqc-sizes window --largest-object 12000 --budget 32768 --concurrency 3
-EMPTY WINDOW: floor 12,000 B > ceiling 10,922 B (short by 1,078 B).
-No capacity cap is both feasible and safe.
+EMPTY WINDOW: floor 12,000 B > ceiling 10,922 B (short by 1,078 B). No
+capacity cap is both feasible and safe. Raise the budget to at least 36,000 B,
+reduce concurrency to at most 2, or choose a smaller credential.
 ```
+
+It exits **1** when the window is empty, so it works as a CI gate as-is.
 
 Zero dependencies. Pure arithmetic. No crypto, no network, no telemetry.
 
@@ -71,6 +74,8 @@ ML-KEM-768+ML-DSA-65 credential over wifi-mgmt-frag (384 B/frame): 20 fragments
      state across 20 frames
 
 $ pqc-sizes sweep --largest-object 12000 --budget 32768 --max-concurrency 4
+largest legitimate object: 12,000 B   budget: 32,768 B
+
  contexts      ceiling   window
 --------------------------------------------
         1       32,768   ok
@@ -102,6 +107,26 @@ win.admits(16385)  # False -- one byte over the budget
 
 `window` exits **1** when the interval is empty, so it drops straight into CI.
 
+## Machine-readable output
+
+Every subcommand takes a global `--json`, placed **before** the subcommand:
+
+```
+$ pqc-sizes --json window --largest-object 12000 --budget 32768 --concurrency 3
+{
+  "floor": 12000,
+  "ceiling": 10922,
+  "budget": 32768,
+  "concurrency": 3,
+  "empty": true,
+  "recommended_cap": null,
+  "max_safe_concurrency": 2
+}
+```
+
+The exit code still carries the verdict in `--json` mode, so you can pipe the
+body to `jq` and branch on `$?` at the same time.
+
 ## What's included
 
 **Algorithms** — ML-KEM 512/768/1024, ML-DSA 44/65/87, Falcon 512/1024, SLH-DSA
@@ -120,7 +145,7 @@ non-empty window means a cap *exists* — not that your code enforces it.
 ## Tests
 
 ```bash
-pip install -e ".[dev]" && pytest    # 26 passed
+pip install -e ".[dev]" && pytest    # 53 passed
 ```
 
 ## Where this comes from
