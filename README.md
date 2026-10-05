@@ -200,7 +200,7 @@ separation — is what the closed core does. See
 [`pqc-dos-embedded`](https://github.com/nickharris808/pqc-dos-embedded) for what enforcement looks like on a 64 KB
 device.
 
-Relevant subject matter is covered by a filed provisional patent application.
+Patent claims have been drafted for relevant subject matter; filing status available on request.
 For commercial use, open a [GitHub Discussion](https://github.com/nickharris808) or an issue.
 
 ## CLI reference
@@ -295,7 +295,7 @@ Eleven free tools for teams moving authenticated key exchange to post-quantum. T
 
 ### The closed core
 
-Closing the 39 failure families — downgrade binding, retransmission-safe installation, fragmentation transcripts, roaming forward secrecy, multi-link key separation, admission control, group-key binding — is a separate proprietary codebase. Relevant subject matter is covered by a filed provisional patent application.
+Closing the 39 failure families — downgrade binding, retransmission-safe installation, fragmentation transcripts, roaming forward secrecy, multi-link key separation, admission control, group-key binding — is a separate proprietary codebase. Patent claims have been drafted for relevant subject matter; filing status available on request.
 
 That split is measured, not asserted: under a replicate noise control only **4 of 32** repair mechanisms are externally distinguishable, so publishing these detectors does not disclose the repairs.
 
